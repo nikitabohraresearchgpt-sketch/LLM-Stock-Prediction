@@ -14,6 +14,11 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 import time
 import json
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
 # Load environment variables from .env file (for local development)
 try:
@@ -31,6 +36,10 @@ MODEL = "gpt-4o"
 
 # Get API key from environment variable
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+# Email configuration
+EMAIL_ADDRESS = "aadityasai.kalyankar@gmail.com"
+EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")  # Gmail App Password from Railway
 
 client = None
 
@@ -50,6 +59,47 @@ def log(message: str):
     print(log_msg)
     with open(LOG_FILE, "a") as f:
         f.write(log_msg + "\n")
+
+
+def send_email(subject: str, body: str, attachment_path: str = None):
+    """Send email with optional Excel attachment"""
+    if not EMAIL_PASSWORD:
+        log("GMAIL_APP_PASSWORD not set. Skipping email.")
+        return
+    
+    try:
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_ADDRESS
+        msg['To'] = EMAIL_ADDRESS
+        msg['Subject'] = subject
+        
+        # Add body
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Add attachment if provided
+        if attachment_path and os.path.exists(attachment_path):
+            with open(attachment_path, "rb") as attachment:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(attachment.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename= {os.path.basename(attachment_path)}'
+                )
+                msg.attach(part)
+        
+        # Send email
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        text = msg.as_string()
+        server.sendmail(EMAIL_ADDRESS, EMAIL_ADDRESS, text)
+        server.quit()
+        
+        log(f"Email sent successfully: {subject}")
+    except Exception as e:
+        log(f"Error sending email: {e}")
 
 
 def get_config():
@@ -303,6 +353,22 @@ def run_daily():
     save_config(config)
     
     log(f"\nDay {day_num} complete! Runs until Feb 1st.")
+    
+    # Send daily email with results
+    email_subject = f"Stock Prediction Results - Day {day_num} ({today})"
+    email_body = f"""Stock Prediction Experiment - Daily Update
+
+Day: {day_num} of {config['max_runs']}
+Date: {today}
+
+Predictions completed for all {len(TICKERS)} tickers:
+{', '.join(TICKERS)}
+
+The Excel file with today's predictions is attached.
+
+Experiment runs until Feb 1st, 2026.
+"""
+    send_email(email_subject, email_body, OUTPUT_FILE)
 
 
 def generate_final_excel_report():
@@ -430,10 +496,31 @@ def generate_final_excel_report():
     print("FINAL RESULTS")
     print("=" * 60)
     print(f"\nPredictions: {total} | Days: {days}")
+    
+    summary_text = f"\nPredictions: {total} | Days: {days}\n\n"
     for col_name, display_name in prompt_names:
         correct = (df[col_name] == '✓').sum()
         accuracy = (correct / total) * 100
-        print(f"{display_name}: {correct}/{total} = {accuracy:.1f}%")
+        result_line = f"{display_name}: {correct}/{total} = {accuracy:.1f}%"
+        print(result_line)
+        summary_text += result_line + "\n"
+    
+    # Send final report email
+    email_subject = "Stock Prediction Experiment - FINAL REPORT (Feb 1st)"
+    email_body = f"""Stock Prediction Experiment - FINAL RESULTS
+
+Experiment Period: {start_date} to {end_date}
+Total Predictions: {total}
+Trading Days: {days}
+
+ACCURACY RESULTS:
+{summary_text}
+
+The complete final Excel report with summary statistics and per-ticker breakdown is attached.
+
+Experiment Complete!
+"""
+    send_email(email_subject, email_body, final_report_file)
 
 
 def generate_report():
