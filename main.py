@@ -11,6 +11,7 @@ from openai import OpenAI
 from datetime import datetime, timedelta
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 import time
 import json
 
@@ -377,10 +378,7 @@ def generate_final_excel_report():
         ws_summary.cell(row=row, column=3, value=total).alignment = Alignment(horizontal='center')
         accuracy_cell = ws_summary.cell(row=row, column=4, value=f"{accuracy:.2f}%")
         accuracy_cell.alignment = Alignment(horizontal='center')
-        if accuracy >= 50:
-            accuracy_cell.font = Font(color="008000", bold=True)
-        else:
-            accuracy_cell.font = Font(color="FF0000", bold=True)
+        accuracy_cell.font = Font(bold=True)
         row += 1
     
     # Per-ticker breakdown
@@ -405,22 +403,20 @@ def generate_final_excel_report():
                 accuracy = (correct / len(ticker_df)) * 100
                 acc_cell = ws_summary.cell(row=row, column=i, value=f"{accuracy:.2f}%")
                 acc_cell.alignment = Alignment(horizontal='center')
-                if accuracy >= 50:
-                    acc_cell.font = Font(color="008000")
-                else:
-                    acc_cell.font = Font(color="FF0000")
             row += 1
     
     # Auto-adjust column widths
-    for column in ws_summary.columns:
+    for col_idx in range(1, 5):  # Columns A-D
         max_length = 0
-        column_letter = column[0].column_letter
-        for cell in column:
-            try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
-            except:
-                pass
+        column_letter = get_column_letter(col_idx)
+        for row_idx in range(1, ws_summary.max_row + 1):
+            cell = ws_summary.cell(row=row_idx, column=col_idx)
+            if cell.value:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
         adjusted_width = min(max_length + 2, 50)
         ws_summary.column_dimensions[column_letter].width = adjusted_width
     
