@@ -59,8 +59,10 @@ def get_config():
         config = {
             "start_date": "2026-01-14",
             "end_date": "2026-01-31",
+            "final_report_date": "2026-02-01",
             "run_count": 0,
-            "max_runs": 13  # Trading days: Jan 14-17, 21-24, 27-31 (skips Jan 20 MLK Day)
+            "max_runs": 13,  # Trading days: Jan 14-17, 21-24, 27-31 (skips Jan 20 MLK Day)
+            "final_report_generated": False
         }
         save_config(config)
         return config
@@ -212,6 +214,16 @@ def initialize_excel():
 def run_daily():
     config = get_config()
     
+    # Check if it's Feb 1st and generate final report
+    today = datetime.now().strftime("%Y-%m-%d")
+    if today == config.get("final_report_date", "2026-02-01") and not config.get("final_report_generated", False):
+        if os.path.exists(OUTPUT_FILE):
+            generate_final_excel_report()
+            config['final_report_generated'] = True
+            save_config(config)
+            log("Final report generated. Experiment complete!")
+        return
+    
     if is_experiment_complete(config):
         log("=" * 60)
         log("EXPERIMENT COMPLETE! 2 weeks of data collected.")
@@ -292,7 +304,144 @@ def run_daily():
     log(f"\nDay {day_num} complete! Runs until Feb 1st.")
 
 
+def generate_final_excel_report():
+    """Generate final Excel report with summary statistics on Feb 1st"""
+    if not os.path.exists(OUTPUT_FILE):
+        log("No data file found. Cannot generate final report.")
+        return
+    
+    df = pd.read_excel(OUTPUT_FILE)
+    
+    if df.empty:
+        log("No data collected yet. Cannot generate final report.")
+        return
+    
+    log("=" * 60)
+    log("GENERATING FINAL EXCEL REPORT")
+    log("=" * 60)
+    
+    # Load existing workbook
+    wb = load_workbook(OUTPUT_FILE)
+    
+    # Create or clear Summary sheet
+    if "Summary" in wb.sheetnames:
+        wb.remove(wb["Summary"])
+    ws_summary = wb.create_sheet("Summary", 0)  # Insert at beginning
+    
+    # Summary header
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=14)
+    title_font = Font(bold=True, size=16)
+    
+    ws_summary.merge_cells('A1:D1')
+    title_cell = ws_summary.cell(row=1, column=1, value="STOCK PREDICTION EXPERIMENT - FINAL RESULTS")
+    title_cell.font = title_font
+    title_cell.alignment = Alignment(horizontal='center')
+    
+    # Experiment details
+    total = len(df)
+    days = df['Day #'].nunique()
+    start_date = df['Date'].min()
+    end_date = df['Date'].max()
+    
+    ws_summary.cell(row=3, column=1, value="Experiment Period:").font = Font(bold=True)
+    ws_summary.cell(row=3, column=2, value=f"{start_date} to {end_date}")
+    ws_summary.cell(row=4, column=1, value="Total Predictions:").font = Font(bold=True)
+    ws_summary.cell(row=4, column=2, value=total)
+    ws_summary.cell(row=5, column=1, value="Trading Days:").font = Font(bold=True)
+    ws_summary.cell(row=5, column=2, value=days)
+    
+    # Results table header
+    row = 7
+    headers = ["Prompt Type", "Correct", "Total", "Accuracy %"]
+    for col, header in enumerate(headers, 1):
+        cell = ws_summary.cell(row=row, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    
+    # Calculate accuracies
+    row += 1
+    prompt_names = [
+        ('P1 ✓', 'Prompt 1 (Basic)'),
+        ('P2 ✓', 'Prompt 2 (Price Data)'),
+        ('P3 ✓', 'Prompt 3 (Research)')
+    ]
+    
+    for col_name, display_name in prompt_names:
+        correct = (df[col_name] == '✓').sum()
+        accuracy = (correct / total) * 100
+        
+        ws_summary.cell(row=row, column=1, value=display_name).font = Font(bold=True)
+        ws_summary.cell(row=row, column=2, value=correct).alignment = Alignment(horizontal='center')
+        ws_summary.cell(row=row, column=3, value=total).alignment = Alignment(horizontal='center')
+        accuracy_cell = ws_summary.cell(row=row, column=4, value=f"{accuracy:.2f}%")
+        accuracy_cell.alignment = Alignment(horizontal='center')
+        if accuracy >= 50:
+            accuracy_cell.font = Font(color="008000", bold=True)
+        else:
+            accuracy_cell.font = Font(color="FF0000", bold=True)
+        row += 1
+    
+    # Per-ticker breakdown
+    row += 2
+    ws_summary.cell(row=row, column=1, value="PER-TICKER ACCURACY").font = Font(bold=True, size=12)
+    row += 1
+    
+    ticker_headers = ["Ticker", "P1 Accuracy", "P2 Accuracy", "P3 Accuracy"]
+    for col, header in enumerate(ticker_headers, 1):
+        cell = ws_summary.cell(row=row, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    
+    row += 1
+    for ticker in TICKERS:
+        ticker_df = df[df['Ticker'] == ticker]
+        if len(ticker_df) > 0:
+            ws_summary.cell(row=row, column=1, value=ticker).font = Font(bold=True)
+            for i, col_name in enumerate(['P1 ✓', 'P2 ✓', 'P3 ✓'], 2):
+                correct = (ticker_df[col_name] == '✓').sum()
+                accuracy = (correct / len(ticker_df)) * 100
+                acc_cell = ws_summary.cell(row=row, column=i, value=f"{accuracy:.2f}%")
+                acc_cell.alignment = Alignment(horizontal='center')
+                if accuracy >= 50:
+                    acc_cell.font = Font(color="008000")
+                else:
+                    acc_cell.font = Font(color="FF0000")
+            row += 1
+    
+    # Auto-adjust column widths
+    for column in ws_summary.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws_summary.column_dimensions[column_letter].width = adjusted_width
+    
+    # Save final report
+    final_report_file = "final_report_feb1.xlsx"
+    wb.save(final_report_file)
+    log(f"Final Excel report saved: {final_report_file}")
+    
+    # Also print summary
+    print("\n" + "=" * 60)
+    print("FINAL RESULTS")
+    print("=" * 60)
+    print(f"\nPredictions: {total} | Days: {days}")
+    for col_name, display_name in prompt_names:
+        correct = (df[col_name] == '✓').sum()
+        accuracy = (correct / total) * 100
+        print(f"{display_name}: {correct}/{total} = {accuracy:.1f}%")
+
+
 def generate_report():
+    """Legacy function - prints report to console"""
     if not os.path.exists(OUTPUT_FILE):
         print("No data file found.")
         return
