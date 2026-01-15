@@ -181,6 +181,8 @@ def create_prompts(ticker: str, closing_prices: list) -> dict:
         "prompt_1": {
             "name": "Basic",
             "text": f"""For the stock ticker {ticker}, predict the direction of the stock price movement for the next trading day.
+
+You must choose a direction - avoid neutral unless there is truly no clear trend or signal.
 Respond with ONLY one of the following options:
 UP
 DOWN
@@ -190,11 +192,14 @@ Do not include explanations, numbers, probabilities, or additional text."""
         
         "prompt_2": {
             "name": "Price Data",
-            "text": f"""You are given recent closing prices for the stock ticker {ticker}.
-Closing prices (most recent last):
+            "text": f"""You are given HISTORICAL closing prices (past trading days) for the stock ticker {ticker}.
+These are historical closing prices from previous trading days (most recent last):
 {price_list}
 
-Based ONLY on the numerical price pattern shown above, predict the direction of the stock's movement for the next trading day.
+Analyze the historical price trend pattern. Is it generally increasing, decreasing, or flat?
+Based ONLY on this historical numerical price pattern, predict the direction of the stock's movement for the NEXT trading day (tomorrow).
+Choose UP if the historical trend suggests upward movement, DOWN if downward, NEUTRAL only if the trend is truly flat with no clear direction.
+
 Respond with ONLY one of the following options:
 UP
 DOWN
@@ -205,7 +210,10 @@ Do not include explanations, indicators, probabilities, or any additional text."
         "prompt_3": {
             "name": "Research",
             "text": f"""For the stock ticker {ticker}, research recent financial news, earnings reports, analyst commentary, and market-relevant events from the past 24–48 hours.
+
 Using your understanding of current news sentiment AND general market context, predict the direction of the stock's movement for the next trading day.
+Choose a direction based on the overall sentiment - avoid neutral unless news is truly balanced with no clear bullish or bearish signal.
+
 Respond with ONLY one of the following options:
 UP
 DOWN
@@ -224,7 +232,7 @@ def get_prediction(prompt: str) -> str:
                 {"role": "user", "content": prompt}
             ],
             max_tokens=10,
-            temperature=0.1
+            temperature=0.3
         )
         
         result = response.choices[0].message.content.strip().upper()
