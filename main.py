@@ -32,7 +32,7 @@ TICKERS = ["TSLA", "NVDA", "AMZN", "META", "AAPL"]
 OUTPUT_FILE = "predictions.xlsx"
 LOG_FILE = "run_log.txt"
 CONFIG_FILE = "config.json"
-MODEL = "gpt-4o"
+MODEL = "gpt-4o"  # Change to "gpt-5" or "gpt-5o" if GPT-5 becomes available. Use --check-model flag to verify.
 
 # Get API key from environment variable
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
@@ -109,10 +109,10 @@ def get_config():
     else:
         config = {
             "start_date": "2026-01-14",
-            "end_date": "2026-01-31",
-            "final_report_date": "2026-02-01",
+            "end_date": "2026-02-18",
+            "final_report_date": "2026-02-19",
             "run_count": 0,
-            "max_runs": 13,  # Trading days: Jan 14-17, 21-24, 27-31 (skips Jan 20 MLK Day)
+            "max_runs": 25,  # Trading days: Jan 14-17, 21-24, 27-31, Feb 3-7, 10-14, 17-18 (skips Jan 20 MLK Day, Feb 16 Presidents Day)
             "final_report_generated": False
         }
         save_config(config)
@@ -182,11 +182,10 @@ def create_prompts(ticker: str, closing_prices: list) -> dict:
             "name": "Basic",
             "text": f"""For the stock ticker {ticker}, predict the direction of the stock price movement for the next trading day.
 
-You must choose a direction - avoid neutral unless there is truly no clear trend or signal.
+You MUST choose either UP or DOWN - neutral is not an option.
 Respond with ONLY one of the following options:
 UP
 DOWN
-NEUTRAL
 Do not include explanations, numbers, probabilities, or additional text."""
         },
         
@@ -196,31 +195,116 @@ Do not include explanations, numbers, probabilities, or additional text."""
 These are historical closing prices from previous trading days (most recent last):
 {price_list}
 
-Analyze the historical price trend pattern. Is it generally increasing, decreasing, or flat?
-Based ONLY on this historical numerical price pattern, predict the direction of the stock's movement for the NEXT trading day (tomorrow).
-Choose UP if the historical trend suggests upward movement, DOWN if downward, NEUTRAL only if the trend is truly flat with no clear direction.
+Analyze the historical price trend pattern. Based ONLY on this historical numerical price pattern, predict the direction of the stock's movement for the NEXT trading day (tomorrow).
+Choose UP if the historical trend suggests upward movement, DOWN if downward.
 
+You MUST choose either UP or DOWN - neutral is not an option.
 Respond with ONLY one of the following options:
 UP
 DOWN
-NEUTRAL
 Do not include explanations, indicators, probabilities, or any additional text."""
         },
         
         "prompt_3": {
             "name": "Research",
-            "text": f"""For the stock ticker {ticker}, research recent financial news, earnings reports, analyst commentary, and market-relevant events from the past 24–48 hours.
+            "text": f"""For the stock ticker {ticker}, you are given:
 
-Using your understanding of current news sentiment AND general market context, predict the direction of the stock's movement for the next trading day.
-Choose a direction based on the overall sentiment - avoid neutral unless news is truly balanced with no clear bullish or bearish signal.
+1. HISTORICAL PRICE DATA:
+Historical closing prices from previous trading days (most recent last):
+{price_list}
 
+2. NEWS AND RESEARCH:
+Research recent financial news headlines, earnings reports, analyst commentary, and market-relevant events from the past 24–48 hours for {ticker}.
+
+Using BOTH the historical price trend pattern AND your understanding of current news sentiment and market context, predict the direction of the stock's movement for the next trading day.
+
+You MUST choose either UP or DOWN based on the combined analysis of price data and news - neutral is not an option.
 Respond with ONLY one of the following options:
 UP
 DOWN
-NEUTRAL
 Do not include explanations, sources, probabilities, numbers, or any additional text."""
         }
     }
+
+
+def list_available_models():
+    """List all models available to your API account"""
+    try:
+        log("=" * 60)
+        log("CHECKING AVAILABLE MODELS")
+        log("=" * 60)
+        
+        # Get list of available models
+        models = get_openai_client().models.list()
+        
+        log("Available models in your account:")
+        gpt_models = []
+        for model in models.data:
+            if "gpt" in model.id.lower():
+                gpt_models.append(model.id)
+                log(f"  - {model.id}")
+        
+        if not gpt_models:
+            log("  No GPT models found in your account")
+        else:
+            log(f"\nTotal GPT models available: {len(gpt_models)}")
+            
+            # Check for GPT-5
+            gpt5_models = [m for m in gpt_models if "gpt-5" in m.lower() or "gpt5" in m.lower()]
+            if gpt5_models:
+                log(f"\n✓ GPT-5 MODELS FOUND: {', '.join(gpt5_models)}")
+            else:
+                log("\n⚠ No GPT-5 models found. Latest available: " + max(gpt_models, key=lambda x: x.lower()))
+        
+        log("=" * 60)
+        return gpt_models
+        
+    except Exception as e:
+        log(f"Error listing models: {e}")
+        log("Note: Some API keys may not have permission to list models")
+        return None
+
+
+def check_model_version():
+    """Check which model is actually being used by the API"""
+    try:
+        log("=" * 60)
+        log("CHECKING MODEL VERSION")
+        log("=" * 60)
+        log(f"Configured model: {MODEL}")
+        
+        # Make a test API call to see what model is actually used
+        response = get_openai_client().chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "user", "content": "Say 'test'"}
+            ],
+            max_tokens=5
+        )
+        
+        # Get the actual model used from the response
+        actual_model = response.model
+        log(f"Actual model used by API: {actual_model}")
+        
+        # Check if it's GPT-5
+        is_gpt5 = "gpt-5" in actual_model.lower() or "gpt5" in actual_model.lower()
+        
+        if is_gpt5:
+            log("✓ CONFIRMED: Using GPT-5!")
+        elif "gpt-4" in actual_model.lower():
+            log("⚠ Using GPT-4 (not GPT-5)")
+        else:
+            log(f"ℹ Using model: {actual_model}")
+        
+        log("=" * 60)
+        return actual_model
+        
+    except Exception as e:
+        log(f"Error checking model version: {e}")
+        if "does not exist" in str(e) or "not found" in str(e).lower():
+            log(f"\n⚠ Model '{MODEL}' is not available to your account.")
+            log("Run with --list-models to see available models.")
+        return None
 
 
 def get_prediction(prompt: str) -> str:
@@ -228,19 +312,27 @@ def get_prediction(prompt: str) -> str:
         response = get_openai_client().chat.completions.create(
             model=MODEL,
             messages=[
-                {"role": "system", "content": "You are a financial analyst. Respond only with UP, DOWN, or NEUTRAL."},
+                {"role": "system", "content": "You are a financial analyst. You must respond with ONLY UP or DOWN. Neutral is not an option."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=10,
             temperature=0.3
         )
         
+        # Log the actual model used (for verification)
+        actual_model = response.model
+        if actual_model != MODEL:
+            log(f"Note: Requested {MODEL}, but API used {actual_model}")
+        
         result = response.choices[0].message.content.strip().upper()
         
-        for valid in ["UP", "DOWN", "NEUTRAL"]:
+        # Only allow UP or DOWN - no NEUTRAL
+        for valid in ["UP", "DOWN"]:
             if valid in result:
                 return valid
-        return "INVALID"
+        # If neither found, default to UP (since neutral is not allowed)
+        log(f"Warning: Invalid response '{result}', defaulting to UP")
+        return "UP"
         
     except Exception as e:
         log(f"API Error: {e}")
@@ -273,9 +365,9 @@ def initialize_excel():
 def run_daily():
     config = get_config()
     
-    # Check if it's Feb 1st and generate final report
+    # Check if it's Feb 19th and generate final report
     today = datetime.now().strftime("%Y-%m-%d")
-    if today == config.get("final_report_date", "2026-02-01") and not config.get("final_report_generated", False):
+    if today == config.get("final_report_date", "2026-02-19") and not config.get("final_report_generated", False):
         if os.path.exists(OUTPUT_FILE):
             generate_final_excel_report()
             config['final_report_generated'] = True
@@ -321,7 +413,8 @@ def run_daily():
         elif prices['today_open'] < prices['yesterday_close']:
             actual = "DOWN"
         else:
-            actual = "NEUTRAL"
+            # If equal, default to UP (since neutral is not an option)
+            actual = "UP"
         
         log(f"  Actual: {actual}")
         
@@ -360,7 +453,7 @@ def run_daily():
     config['run_count'] += 1
     save_config(config)
     
-    log(f"\nDay {day_num} complete! Runs until Feb 1st.")
+    log(f"\nDay {day_num} complete! Runs until Feb 18th.")
     
     # Send daily email with results
     email_subject = f"Stock Prediction Results - Day {day_num} ({today})"
@@ -374,13 +467,13 @@ Predictions completed for all {len(TICKERS)} tickers:
 
 The Excel file with today's predictions is attached.
 
-Experiment runs until Feb 1st, 2026.
+Experiment runs until Feb 18th, 2026.
 """
     send_email(email_subject, email_body, OUTPUT_FILE)
 
 
 def generate_final_excel_report():
-    """Generate final Excel report with summary statistics on Feb 1st"""
+    """Generate final Excel report with summary statistics on Feb 19th"""
     if not os.path.exists(OUTPUT_FILE):
         log("No data file found. Cannot generate final report.")
         return
@@ -440,7 +533,7 @@ def generate_final_excel_report():
     prompt_names = [
         ('P1 ✓', 'Prompt 1 (Basic)'),
         ('P2 ✓', 'Prompt 2 (Price Data)'),
-        ('P3 ✓', 'Prompt 3 (Research)')
+        ('P3 ✓', 'Prompt 3 (Price Data + News)')
     ]
     
     for col_name, display_name in prompt_names:
@@ -495,7 +588,7 @@ def generate_final_excel_report():
         ws_summary.column_dimensions[column_letter].width = adjusted_width
     
     # Save final report
-    final_report_file = "final_report_feb1.xlsx"
+    final_report_file = "final_report_feb18.xlsx"
     wb.save(final_report_file)
     log(f"Final Excel report saved: {final_report_file}")
     
@@ -514,7 +607,7 @@ def generate_final_excel_report():
         summary_text += result_line + "\n"
     
     # Send final report email
-    email_subject = "Stock Prediction Experiment - FINAL REPORT (Feb 1st)"
+    email_subject = "Stock Prediction Experiment - FINAL REPORT (Feb 18th)"
     email_body = f"""Stock Prediction Experiment - FINAL RESULTS
 
 Experiment Period: {start_date} to {end_date}
@@ -552,7 +645,7 @@ def generate_report():
     
     print(f"\nPredictions: {total} | Days: {days}")
     
-    for col, name in [('P1 ✓', 'Prompt 1 (Basic)'), ('P2 ✓', 'Prompt 2 (Price Data)'), ('P3 ✓', 'Prompt 3 (Research)')]:
+    for col, name in [('P1 ✓', 'Prompt 1 (Basic)'), ('P2 ✓', 'Prompt 2 (Price Data)'), ('P3 ✓', 'Prompt 3 (Price Data + News)')]:
         correct = (df[col] == '✓').sum()
         accuracy = (correct / total) * 100
         print(f"{name}: {correct}/{total} = {accuracy:.1f}%")
@@ -561,5 +654,12 @@ def generate_report():
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--report":
         generate_report()
+    elif len(sys.argv) > 1 and sys.argv[1] == "--check-model":
+        check_model_version()
+    elif len(sys.argv) > 1 and sys.argv[1] == "--list-models":
+        list_available_models()
     else:
+        # Check model version on first run
+        if not os.path.exists(CONFIG_FILE):
+            check_model_version()
         run_daily()

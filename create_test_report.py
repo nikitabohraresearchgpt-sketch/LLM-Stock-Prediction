@@ -23,8 +23,8 @@ for date in dates:
     for ticker in TICKERS:
         # Random sample predictions and results
         import random
-        predictions = random.choices(["UP", "DOWN", "NEUTRAL"], k=3)
-        actual = random.choice(["UP", "DOWN", "NEUTRAL"])
+        predictions = random.choices(["UP", "DOWN"], k=3)
+        actual = random.choice(["UP", "DOWN"])
         
         p1_correct = "✓" if predictions[0] == actual else "✗"
         p2_correct = "✓" if predictions[1] == actual else "✗"
@@ -96,7 +96,7 @@ row += 1
 prompt_names = [
     ('P1 ✓', 'Prompt 1 (Basic)'),
     ('P2 ✓', 'Prompt 2 (Price Data)'),
-    ('P3 ✓', 'Prompt 3 (Research)')
+    ('P3 ✓', 'Prompt 3 (Price Data + News)')
 ]
 
 for col_name, display_name in prompt_names:
@@ -190,7 +190,7 @@ for col_idx in range(1, len(df.columns) + 1):
     ws_predictions.column_dimensions[column_letter].width = adjusted_width
 
 # Save final report
-final_report_file = "final_report_feb1.xlsx"
+final_report_file = "final_report_feb18.xlsx"
 wb.save(final_report_file)
 print(f"✅ Test Excel report created: {final_report_file}")
 print(f"   - Summary sheet with overall and per-ticker statistics")
