@@ -151,31 +151,47 @@ def is_market_day() -> bool:
 def get_stock_prices(ticker: str) -> dict:
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="5d")
+        # Get recent data for today's prices
+        hist_recent = stock.history(period="5d")
         
-        if len(hist) < 2:
+        if len(hist_recent) < 2:
             log(f"Warning: Not enough data for {ticker}")
             return None
         
-        today_open = hist['Open'].iloc[-1]
-        today_close = hist['Close'].iloc[-1]
-        yesterday_close = hist['Close'].iloc[-2]
-        closing_prices = hist['Close'].tail(10).tolist()
+        # Get extended historical data (6 months) for trend analysis
+        hist_extended = stock.history(period="6mo")
+        
+        today_open = hist_recent['Open'].iloc[-1]
+        today_close = hist_recent['Close'].iloc[-1]
+        yesterday_close = hist_recent['Close'].iloc[-2]
+        closing_prices_recent = hist_recent['Close'].tail(10).tolist()
+        
+        # Get historical closing prices over 6 months (sampled weekly for manageable size)
+        if len(hist_extended) > 0:
+            # Sample approximately weekly data points (every ~5 trading days)
+            historical_prices = hist_extended['Close'].iloc[::5].tolist()
+            # Ensure we have at least 20 data points, if not, use all available
+            if len(historical_prices) < 20:
+                historical_prices = hist_extended['Close'].tolist()
+        else:
+            historical_prices = closing_prices_recent
         
         return {
             "ticker": ticker,
             "today_open": round(today_open, 2),
             "today_close": round(today_close, 2),
             "yesterday_close": round(yesterday_close, 2),
-            "closing_prices": [round(p, 2) for p in closing_prices]
+            "closing_prices": [round(p, 2) for p in closing_prices_recent],
+            "historical_prices": [round(p, 2) for p in historical_prices]
         }
     except Exception as e:
         log(f"Error fetching {ticker}: {e}")
         return None
 
 
-def create_prompts(ticker: str, closing_prices: list) -> dict:
+def create_prompts(ticker: str, closing_prices: list, historical_prices: list) -> dict:
     price_list = ", ".join([f"${p}" for p in closing_prices])
+    historical_price_list = ", ".join([f"${p}" for p in historical_prices])
     
     return {
         "prompt_1": {
@@ -191,12 +207,12 @@ Do not include explanations, numbers, probabilities, or additional text."""
         
         "prompt_2": {
             "name": "Price Data",
-            "text": f"""You are given HISTORICAL closing prices (past trading days) for the stock ticker {ticker}.
-These are historical closing prices from previous trading days (most recent last):
-{price_list}
+            "text": f"""You are given EXTENDED HISTORICAL closing prices (over the past 6 months) for the stock ticker {ticker}.
+These historical closing prices span multiple months and show long-term price trends (most recent last):
+{historical_price_list}
 
-Analyze the historical price trend pattern. Based ONLY on this historical numerical price pattern, predict the direction of the stock's movement for the NEXT trading day (tomorrow).
-Choose UP if the historical trend suggests upward movement, DOWN if downward.
+Analyze the EXTENDED historical price trend pattern over time. Look at the overall trend direction, momentum, and price behavior patterns across the entire historical period. Based ONLY on this extended historical numerical price pattern and trend analysis, predict the direction of the stock's movement for the NEXT trading day (tomorrow).
+Consider the longer-term trend direction, not just recent short-term fluctuations.
 
 You MUST choose either UP or DOWN - neutral is not an option.
 Respond with ONLY one of the following options:
@@ -207,18 +223,31 @@ Do not include explanations, indicators, probabilities, or any additional text."
         
         "prompt_3": {
             "name": "Research",
-            "text": f"""For the stock ticker {ticker}, you are given:
+            "text": f"""For the stock ticker {ticker}, conduct COMPREHENSIVE DETAILED RESEARCH and analysis:
 
 1. HISTORICAL PRICE DATA:
-Historical closing prices from previous trading days (most recent last):
+Recent closing prices from previous trading days (most recent last):
 {price_list}
 
-2. NEWS AND RESEARCH:
-Research recent financial news headlines, earnings reports, analyst commentary, and market-relevant events from the past 24–48 hours for {ticker}.
+Extended historical closing prices over the past 6 months (most recent last):
+{historical_price_list}
 
-Using BOTH the historical price trend pattern AND your understanding of current news sentiment and market context, predict the direction of the stock's movement for the next trading day.
+2. COMPREHENSIVE RESEARCH - Analyze ALL of the following:
+- Recent financial news headlines, earnings reports, and earnings history
+- Analyst ratings, price targets, and recommendations
+- Company fundamentals (revenue trends, profitability, growth metrics)
+- Industry trends and sector performance
+- Market conditions and broader economic factors
+- Technical indicators and price patterns
+- Recent corporate actions (mergers, acquisitions, partnerships, product launches)
+- Regulatory changes or policy impacts
+- Competitive positioning and market share
+- Management commentary and guidance
+- Any significant events or catalysts from the past week
 
-You MUST choose either UP or DOWN based on the combined analysis of price data and news - neutral is not an option.
+Using BOTH the comprehensive historical price trend analysis AND your detailed research across all these factors, synthesize a well-informed prediction for the direction of the stock's movement for the next trading day.
+
+You MUST choose either UP or DOWN based on this comprehensive analysis - neutral is not an option.
 Respond with ONLY one of the following options:
 UP
 DOWN
@@ -418,7 +447,7 @@ def run_daily():
         
         log(f"  Actual: {actual}")
         
-        prompts = create_prompts(ticker, prices['closing_prices'])
+        prompts = create_prompts(ticker, prices['closing_prices'], prices.get('historical_prices', prices['closing_prices']))
         
         predictions = {}
         for key, prompt_data in prompts.items():
@@ -532,8 +561,8 @@ def generate_final_excel_report():
     row += 1
     prompt_names = [
         ('P1 ✓', 'Prompt 1 (Basic)'),
-        ('P2 ✓', 'Prompt 2 (Price Data)'),
-        ('P3 ✓', 'Prompt 3 (Price Data + News)')
+        ('P2 ✓', 'Prompt 2 (Historical Price Data)'),
+        ('P3 ✓', 'Prompt 3 (Comprehensive Research)')
     ]
     
     for col_name, display_name in prompt_names:
@@ -645,7 +674,7 @@ def generate_report():
     
     print(f"\nPredictions: {total} | Days: {days}")
     
-    for col, name in [('P1 ✓', 'Prompt 1 (Basic)'), ('P2 ✓', 'Prompt 2 (Price Data)'), ('P3 ✓', 'Prompt 3 (Price Data + News)')]:
+    for col, name in [('P1 ✓', 'Prompt 1 (Basic)'), ('P2 ✓', 'Prompt 2 (Historical Price Data)'), ('P3 ✓', 'Prompt 3 (Comprehensive Research)')]:
         correct = (df[col] == '✓').sum()
         accuracy = (correct / total) * 100
         print(f"{name}: {correct}/{total} = {accuracy:.1f}%")

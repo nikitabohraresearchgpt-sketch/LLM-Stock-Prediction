@@ -1,0 +1,82 @@
+================================================================================
+STOCK PREDICTION PROMPTS
+================================================================================
+
+================================================================================
+PROMPT 1: BASIC
+================================================================================
+
+For the stock ticker {ticker}, predict the direction of the stock price movement for the next trading day.
+
+You MUST choose either UP or DOWN - neutral is not an option.
+Respond with ONLY one of the following options:
+UP
+DOWN
+Do not include explanations, numbers, probabilities, or additional text.
+
+
+================================================================================
+PROMPT 2: HISTORICAL PRICE DATA
+================================================================================
+
+You are given EXTENDED HISTORICAL closing prices (over the past 6 months) for the stock ticker {ticker}.
+These historical closing prices span multiple months and show long-term price trends (most recent last):
+{historical_price_list}
+
+Analyze the EXTENDED historical price trend pattern over time. Look at the overall trend direction, momentum, and price behavior patterns across the entire historical period. Based ONLY on this extended historical numerical price pattern and trend analysis, predict the direction of the stock's movement for the NEXT trading day (tomorrow).
+Consider the longer-term trend direction, not just recent short-term fluctuations.
+
+You MUST choose either UP or DOWN - neutral is not an option.
+Respond with ONLY one of the following options:
+UP
+DOWN
+Do not include explanations, indicators, probabilities, or any additional text.
+
+
+================================================================================
+PROMPT 3: COMPREHENSIVE RESEARCH
+================================================================================
+
+For the stock ticker {ticker}, conduct COMPREHENSIVE DETAILED RESEARCH and analysis:
+
+1. HISTORICAL PRICE DATA:
+Recent closing prices from previous trading days (most recent last):
+{price_list}
+
+Extended historical closing prices over the past 6 months (most recent last):
+{historical_price_list}
+
+2. COMPREHENSIVE RESEARCH - Analyze ALL of the following:
+- Recent financial news headlines, earnings reports, and earnings history
+- Analyst ratings, price targets, and recommendations
+- Company fundamentals (revenue trends, profitability, growth metrics)
+- Industry trends and sector performance
+- Market conditions and broader economic factors
+- Technical indicators and price patterns
+- Recent corporate actions (mergers, acquisitions, partnerships, product launches)
+- Regulatory changes or policy impacts
+- Competitive positioning and market share
+- Management commentary and guidance
+- Any significant events or catalysts from the past week
+
+Using BOTH the comprehensive historical price trend analysis AND your detailed research across all these factors, synthesize a well-informed prediction for the direction of the stock's movement for the next trading day.
+
+You MUST choose either UP or DOWN based on this comprehensive analysis - neutral is not an option.
+Respond with ONLY one of the following options:
+UP
+DOWN
+Do not include explanations, sources, probabilities, numbers, or any additional text.
+
+
+================================================================================
+NOTES:
+================================================================================
+
+- All prompts require a response of ONLY "UP" or "DOWN" - no neutral option
+- {ticker} is replaced with the stock ticker symbol (e.g., TSLA, NVDA, AMZN, META, AAPL)
+- {price_list} is replaced with recent closing prices (last 10 trading days)
+- {historical_price_list} is replaced with extended historical closing prices (6 months, sampled weekly)
+- System message: "You are a financial analyst. You must respond with ONLY UP or DOWN. Neutral is not an option."
+- Temperature: 0.3
+- Max tokens: 10
+
