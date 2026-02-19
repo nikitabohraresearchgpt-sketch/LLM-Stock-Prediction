@@ -109,10 +109,10 @@ def get_config():
     else:
         config = {
             "start_date": "2026-01-14",
-            "end_date": "2026-02-18",
-            "final_report_date": "2026-02-19",
+            "end_date": "2026-03-04",
+            "final_report_date": "2026-03-05",
             "run_count": 0,
-            "max_runs": 25,  # Trading days: Jan 14-17, 21-24, 27-31, Feb 3-7, 10-14, 17-18 (skips Jan 20 MLK Day, Feb 16 Presidents Day)
+            "max_runs": 35,  # Trading days: Jan 14-17, 21-24, 27-31, Feb 3-7, 10-14, 17-18, 19-21, 24-28, Mar 2-4 (skips Jan 20 MLK Day, Feb 16 Presidents Day)
             "final_report_generated": False
         }
         save_config(config)
@@ -394,9 +394,9 @@ def initialize_excel():
 def run_daily():
     config = get_config()
     
-    # Check if it's Feb 19th and generate final report
+    # Check if it's the final report date and generate final report
     today = datetime.now().strftime("%Y-%m-%d")
-    if today == config.get("final_report_date", "2026-02-19") and not config.get("final_report_generated", False):
+    if today == config.get("final_report_date", "2026-03-05") and not config.get("final_report_generated", False):
         if os.path.exists(OUTPUT_FILE):
             generate_final_excel_report()
             config['final_report_generated'] = True
@@ -482,7 +482,7 @@ def run_daily():
     config['run_count'] += 1
     save_config(config)
     
-    log(f"\nDay {day_num} complete! Runs until Feb 18th.")
+    log(f"\nDay {day_num} complete! Runs until Mar 4th.")
     
     # Send daily email with results
     email_subject = f"Stock Prediction Results - Day {day_num} ({today})"
@@ -496,13 +496,13 @@ Predictions completed for all {len(TICKERS)} tickers:
 
 The Excel file with today's predictions is attached.
 
-Experiment runs until Feb 18th, 2026.
+Experiment runs until Mar 4th, 2026.
 """
     send_email(email_subject, email_body, OUTPUT_FILE)
 
 
 def generate_final_excel_report():
-    """Generate final Excel report with summary statistics on Feb 19th"""
+    """Generate final Excel report with summary statistics on Mar 5th"""
     if not os.path.exists(OUTPUT_FILE):
         log("No data file found. Cannot generate final report.")
         return
@@ -617,7 +617,7 @@ def generate_final_excel_report():
         ws_summary.column_dimensions[column_letter].width = adjusted_width
     
     # Save final report
-    final_report_file = "final_report_feb18.xlsx"
+    final_report_file = "final_report_mar4.xlsx"
     wb.save(final_report_file)
     log(f"Final Excel report saved: {final_report_file}")
     
@@ -636,7 +636,7 @@ def generate_final_excel_report():
         summary_text += result_line + "\n"
     
     # Send final report email
-    email_subject = "Stock Prediction Experiment - FINAL REPORT (Feb 18th)"
+    email_subject = "Stock Prediction Experiment - FINAL REPORT (Mar 4th)"
     email_body = f"""Stock Prediction Experiment - FINAL RESULTS
 
 Experiment Period: {start_date} to {end_date}

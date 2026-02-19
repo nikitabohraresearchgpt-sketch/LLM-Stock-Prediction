@@ -190,7 +190,7 @@ for col_idx in range(1, len(df.columns) + 1):
     ws_predictions.column_dimensions[column_letter].width = adjusted_width
 
 # Save final report
-final_report_file = "final_report_feb18.xlsx"
+final_report_file = "final_report_mar4.xlsx"
 wb.save(final_report_file)
 print(f"✅ Test Excel report created: {final_report_file}")
 print(f"   - Summary sheet with overall and per-ticker statistics")
